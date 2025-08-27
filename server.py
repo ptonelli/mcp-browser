@@ -1,4 +1,5 @@
 import os
+import sys
 import base64
 import aiohttp
 import mcp
@@ -42,7 +43,7 @@ def get_image_dimensions(image_data: bytes) -> Tuple[int, int]:
 
 async def fetch_images_from_soup(session: aiohttp.ClientSession, soup: BeautifulSoup, base_url: str, max_images: int = 5) -> List[types.ImageContent]:
     """
-    Extract and fetch images from a BeautifulSoup object, sorted by resolution (largest first).
+    Extract and fetch images from a BeautifulSoup object in their original order.
 
     Args:
         session: The aiohttp session to use for requests
@@ -51,7 +52,7 @@ async def fetch_images_from_soup(session: aiohttp.ClientSession, soup: Beautiful
         max_images: Maximum number of images to fetch
 
     Returns:
-        List[types.ImageContent]: List of fetched images sorted by size (largest first)
+        List[types.ImageContent]: List of fetched images in their original order
     """
     images = soup.find_all("img", src=True)
     headers = {"User-Agent": USER_AGENT}
@@ -59,7 +60,7 @@ async def fetch_images_from_soup(session: aiohttp.ClientSession, soup: Beautiful
     # List to store image data with dimensions for sorting
     image_data_list = []
 
-    for img in images:
+    for index, img in enumerate(images):
         img_src = img.get("src")
         if not img_src:
             continue
@@ -80,14 +81,15 @@ async def fetch_images_from_soup(session: aiohttp.ClientSession, soup: Beautiful
                     # Get content type, default to jpeg if not specified
                     content_type = img_response.headers.get('content-type', 'image/jpeg')
 
-                    # Store image info for sorting
+                    # Store image info for sorting, including original index
                     image_info = {
                         'data': img_data,
                         'content_type': content_type,
                         'width': width,
                         'height': height,
                         'pixel_count': pixel_count,
-                        'url': img_url
+                        'url': img_url,
+                        'original_index': index  # Keep track of original order
                     }
                     image_data_list.append(image_info)
 
@@ -95,12 +97,18 @@ async def fetch_images_from_soup(session: aiohttp.ClientSession, soup: Beautiful
             # If individual image fails, continue with others
             continue
 
-    # Sort images by pixel count (largest first)
+    # Sort images by pixel count (largest first) to select the biggest ones
     image_data_list.sort(key=lambda x: x['pixel_count'], reverse=True)
 
-    # Convert to ImageContent objects, limiting to max_images
+    # Take the max_images biggest images
+    biggest_images = image_data_list[:max_images]
+
+    # Re-sort the selected biggest images by their original order
+    biggest_images.sort(key=lambda x: x['original_index'])
+
+    # Convert to ImageContent objects
     image_content_list = []
-    for i, img_info in enumerate(image_data_list[:max_images]):
+    for img_info in biggest_images:
         image_content = types.ImageContent(
             type="image",
             data=base64.b64encode(img_info['data']).decode('utf-8'),
@@ -141,6 +149,27 @@ async def browse_webpage(url: str, selectors: dict = None, capture_images: bool 
                             text=f"Error: HTTP {response.status} - Failed to fetch webpage",
                         )
                     ]
+                # NOUVELLE LOGIQUE: Vérifier le Content-Type pour détecter les images directes
+                content_type = response.headers.get('content-type', '').lower()
+
+                # Si c'est une image directe, la traiter comme telle
+                if content_type.startswith('image/'):
+                    if capture_images:
+                        img_data = await response.read()
+                        width, height = get_image_dimensions(img_data)
+
+                        image_content = types.ImageContent(
+                            type="image",
+                            data=base64.b64encode(img_data).decode('utf-8'),
+                            mimeType=content_type
+                        )
+
+                        # Retourner info + image
+                        text_info = f"Direct image: {url}\nDimensions: {width}x{height} pixels\nContent-Type: {content_type}\nSize: {len(img_data)} bytes"
+                        return [
+                            types.TextContent(type="text", text=text_info),
+                            image_content
+                        ]
 
                 # Handle encoding issues
                 try:
