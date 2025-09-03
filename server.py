@@ -132,11 +132,11 @@ def solve_anubis_pow(challenge: str, difficulty: int = 4) -> tuple:
     """Solve Anubis proof-of-work challenge"""
     nonce = 0
     target_prefix = '0' * difficulty
-    
+
     while True:
         hash_input = f"{challenge}{nonce}"
         hash_result = hashlib.sha256(hash_input.encode()).hexdigest()
-        
+
         if hash_result.startswith(target_prefix):
             return nonce, hash_result
         nonce += 1
@@ -144,7 +144,7 @@ def solve_anubis_pow(challenge: str, difficulty: int = 4) -> tuple:
 def extract_challenge_from_html(html: str) -> tuple:
     """Extract challenge data from Anubis HTML"""
     script_match = re.search(r'<script id="anubis_challenge" type="application/json">([^<]+)</script>', html)
-    
+
     if script_match:
         try:
             challenge_data = json.loads(script_match.group(1))
@@ -153,76 +153,76 @@ def extract_challenge_from_html(html: str) -> tuple:
             return challenge, difficulty
         except (json.JSONDecodeError, KeyError):
             pass
-    
+
     return None, None
 
 def solve_anubis_challenge_sync(url: str) -> Optional[str]:
     """
     Synchronous Anubis bypass using urllib (for compatibility with async context)
-    
+
     Args:
         url: The URL to access
-        
+
     Returns:
         The HTML content after bypassing Anubis protection, or None if failed
     """
-    
+
     try:
         # Create a cookie jar to handle cookies automatically
         cookie_jar = CookieJar()
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
-        
+
         # First request to get the challenge
         req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-        
+
         with opener.open(req, timeout=REQUEST_TIMEOUT) as response:
             html = response.read().decode('utf-8', errors='replace')
-            
+
             if not ("Making sure you" in html and "bot" in html and "Anubis" in html):
                 # No Anubis protection
                 return None
-            
+
             challenge, difficulty = extract_challenge_from_html(html)
-            
+
         if not challenge or not difficulty:
             return None
-            
+
         # Solve the proof-of-work
         nonce, full_hash = solve_anubis_pow(challenge, difficulty)
-        
+
         # Submit solution to get auth cookie
         parsed_url = urlparse(url)
         base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
         pass_challenge_url = f"{base_url}/.within.website/x/cmd/anubis/api/pass-challenge"
-        
+
         params = {
             'response': full_hash,
             'nonce': str(nonce),
             'redir': parsed_url.path or '/',
             'elapsedTime': '100'
         }
-        
+
         verification_url = f"{pass_challenge_url}?{urllib.parse.urlencode(params)}"
         verify_req = urllib.request.Request(verification_url, headers={'User-Agent': USER_AGENT})
-        
+
         # Submit the solution and get the result
         with opener.open(verify_req, timeout=REQUEST_TIMEOUT) as verify_response:
             verify_content = verify_response.read().decode('utf-8', errors='replace')
-            
+
             # Check if we got real content directly or need to make another request
             if "Making sure you" in verify_content and "bot" in verify_content:
                 # Still getting Anubis, try original URL with cookies
                 final_req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
                 with opener.open(final_req, timeout=REQUEST_TIMEOUT) as final_response:
                     content = final_response.read().decode('utf-8', errors='replace')
-                    
+
                     if "Making sure you" in content and "bot" in content:
                         return None
                     else:
                         return content
             else:
                 return verify_content
-                
+
     except Exception:
         return None
 
@@ -303,7 +303,7 @@ async def browse_webpage(url: str, selectors: dict = None, capture_images: bool 
                     # Use synchronous bypass (since we need urllib for cookie jar)
                     loop = asyncio.get_event_loop()
                     bypassed_html = await loop.run_in_executor(None, solve_anubis_challenge_sync, url)
-                    
+
                     if bypassed_html:
                         html = bypassed_html
                     else:
