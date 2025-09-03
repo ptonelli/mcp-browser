@@ -1,26 +1,25 @@
 # Makefile
 
 PROJECT   := mcp-browser
-REGISTRY  ?= registry.example.com   # your private registry hostname
-NAMESPACE ?=                        # optional; leave empty if not used
-CONTEXT   ?= .
+CONTAINER_REGISTRY  ?= registry.example.com   # your private registry hostname
+NAMESPACE ?=                        # optional; leave empty if your registry doesn't require a namespace
 
 # Resolve image name with optional namespace
-IMAGE := $(REGISTRY)$(if $(strip $(NAMESPACE)),/$(strip $(NAMESPACE)))/$(PROJECT)
+IMAGE := $(CONTAINER_REGISTRY)$(if $(NAMESPACE),/$(NAMESPACE))/$(PROJECT)
 
 .PHONY: docker dockerx docker-nocache push
 
 docker:
-	docker build -t $(IMAGE):latest $(CONTEXT)
+	docker build -t $(IMAGE):latest .
 
 dockerx:
 	VERSION=$$(date +%Y%m%d%H%M); \
 	docker buildx build --platform linux/amd64,linux/arm64 \
 		-t $(IMAGE):$$VERSION -t $(IMAGE):latest \
-		--push $(CONTEXT)
+		--push .
 
 docker-nocache:
-	docker build --no-cache -t $(IMAGE):latest $(CONTEXT)
+	docker build --no-cache -t $(IMAGE):latest .
 
 push:
 	VERSION=$$(date +%Y%m%d%H%M); \
