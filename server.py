@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 from fastmcp.utilities.types import Image
 from PIL import Image
 from io import BytesIO
+from anubis_solver import solve_anubis_challenge_sync, is_anubis_page
 
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", 8000))
@@ -119,7 +120,6 @@ async def fetch_images_from_soup(session: aiohttp.ClientSession, soup: Beautiful
     return image_content_list
 
 
-from anubis_solver import solve_anubis_challenge_sync, is_anubis_page
 
 @mcp.tool()
 async def browse_webpage(url: str, selectors: dict = None, capture_images: bool = True, max_images: int = 5) -> List[types.Content]:
